@@ -1,16 +1,69 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+
+#define HISTORY_SIZE 10
+#define HISTORY_FILE "history.txt"
 
 int main() {
+  // для ввода
   char input[1024];
-  while (1) 
+
+  // для истории команд
+  char* history[HISTORY_SIZE];
+  for (int i = 0; i < HISTORY_SIZE; i++) 
   {
-    if (fgets(input, 1024, stdin) == NULL)
-        break;
-    if (strcmp(input, "exit\n") == 0 || strcmp(input, "\\q\n") == 0)
-        break;
-    printf("%s", input);
+        history[i] = malloc(1024);
   }
+  int history_index = 0;
+  FILE* history_file = fopen(HISTORY_FILE, "a+");
+
+  char line[1024];
+  while (fgets(line, 1024, history_file) != NULL) 
+  {
+      strcpy(history[history_index], line);
+      history_index = (history_index + 1) % HISTORY_SIZE;
+  }
+
+  while (fgets(input, 1024, stdin) != NULL) 
+  {
+    if (strcmp(input, "exit\n") == 0 || strcmp(input, "\\q\n") == 0)
+    {
+        strcpy(history[history_index], input);
+        history_index = history_index+1;
+        if (history_index == 10)
+           history_index = 0;
+        fprintf(history_file, "%s", input);
+        break;
+    }
+
+    if (strcmp(input, "history\n") == 0)
+    {
+        // вывод истории команд
+        strcpy(history[history_index], input);
+        history_index = history_index+1;
+        if (history_index == 10)
+        history_index = 0;
+        fprintf(history_file, "%s", input);
+        for (int i = 0; i < HISTORY_SIZE; i++) 
+        {
+            printf("%d: %s", i + 1, history[i]);
+        }
+    }
+
+    else
+    {
+      printf("%s", input);
+
+      // добавление в историю команд
+      strcpy(history[history_index], input);
+      history_index = history_index+1;
+      if (history_index == 10)
+          history_index = 0;
+      fprintf(history_file, "%s", input);
+    }
+  }
+  fclose(history_file);
   return 0;
 }
 
