@@ -1,11 +1,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #define HISTORY_SIZE 10
 #define HISTORY_FILE "history.txt"
 
+void sighup_handler(int sig) {
+    printf("Configuration reloaded\n");
+}
+
 int main() {
+  signal(SIGHUP, sighup_handler);
+
   // Для ввода
   char input[1024];
 
