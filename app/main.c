@@ -27,25 +27,22 @@ int main() {
 
   while (fgets(input, 1024, stdin) != NULL) 
   {
+    // Сохранение команды в историю
+    strcpy(history[history_index], input);
+    history_index = history_index+1;
+    if (history_index == 10)
+        history_index = 0;
+    fprintf(history_file, "%s", input);
+
     // Команды exit и \q
     if (strcmp(input, "exit\n") == 0 || strcmp(input, "\\q\n") == 0)
     {
-        strcpy(history[history_index], input);
-        history_index = history_index+1;
-        if (history_index == 10)
-           history_index = 0;
-        fprintf(history_file, "%s", input);
         break;
     }
 
     // Команда history
     else if (strcmp(input, "history\n") == 0)
     {
-        strcpy(history[history_index], input);
-        history_index = history_index+1;
-        if (history_index == 10)
-        history_index = 0;
-        fprintf(history_file, "%s", input);
         for (int i = 0; i < HISTORY_SIZE; i++) 
         {
             printf("%d: %s", i + 1, history[i]);
@@ -55,35 +52,26 @@ int main() {
     // Команда echo
     else if (strncmp(input, "echo", 4) == 0)
     {
-        strcpy(history[history_index], input);
-        history_index = history_index+1;
-        if (history_index == 10)
-            history_index = 0;
-        fprintf(history_file, "%s", input);
         printf("%s", input + 5);
     }
 
-    // Команда \e $PATH
-    else if (strncmp(input, "\\e $PATH\n", 8) == 0) 
+    // Команда \e <variable>
+    else if (strncmp(input, "\\e ", 3) == 0) 
     {
-        strcpy(history[history_index], input);
-        history_index = history_index+1;
-        if (history_index == 10)
-            history_index = 0;
-        fprintf(history_file, "%s", input);
-        char *path = getenv("PATH");
-        printf("%s\n", path);
+        char* var_name = input + 4;
+        var_name[strcspn(var_name, "\n")] = 0;
+        char* var_value = getenv(var_name);
+        if (var_value != NULL) 
+            printf("%s\n", var_value);
+        else
+            printf("Variable not found: %s\n", var_name);
     }
 
-    // Команда не найдена
+    // Выполнить указанный бинарник
     else
     {
-      printf("The command is not found!\n");
-      strcpy(history[history_index], input);
-      history_index = history_index+1;
-      if (history_index == 10)
-          history_index = 0;
-      fprintf(history_file, "%s", input);
+        input[strcspn(input, "\n")] = 0;
+        system(input);
     }
   }
   fclose(history_file);
