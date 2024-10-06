@@ -6,10 +6,10 @@
 #define HISTORY_FILE "history.txt"
 
 int main() {
-  // для ввода
+  // Для ввода
   char input[1024];
 
-  // для истории команд
+  // Для истории команд
   char* history[HISTORY_SIZE];
   for (int i = 0; i < HISTORY_SIZE; i++) 
   {
@@ -27,6 +27,7 @@ int main() {
 
   while (fgets(input, 1024, stdin) != NULL) 
   {
+    // Команды exit и \q
     if (strcmp(input, "exit\n") == 0 || strcmp(input, "\\q\n") == 0)
     {
         strcpy(history[history_index], input);
@@ -37,9 +38,9 @@ int main() {
         break;
     }
 
-    if (strcmp(input, "history\n") == 0)
+    // Команда history
+    else if (strcmp(input, "history\n") == 0)
     {
-        // вывод истории команд
         strcpy(history[history_index], input);
         history_index = history_index+1;
         if (history_index == 10)
@@ -51,11 +52,21 @@ int main() {
         }
     }
 
+    // Команда echo
+    else if (strncmp(input, "echo", 4) == 0)
+    {
+        strcpy(history[history_index], input);
+        history_index = history_index+1;
+        if (history_index == 10)
+            history_index = 0;
+        fprintf(history_file, "%s", input);
+        printf("%s", input + 5);
+    }
+
+    // Команда не найдена
     else
     {
-      printf("%s", input);
-
-      // добавление в историю команд
+      printf("The command is not found!\n");
       strcpy(history[history_index], input);
       history_index = history_index+1;
       if (history_index == 10)
