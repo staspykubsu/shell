@@ -63,6 +63,18 @@ int main() {
         printf("%s", input + 5);
     }
 
+    // Команда \e $PATH
+    else if (strncmp(input, "\\e $PATH\n", 8) == 0) 
+    {
+        strcpy(history[history_index], input);
+        history_index = history_index+1;
+        if (history_index == 10)
+            history_index = 0;
+        fprintf(history_file, "%s", input);
+        char *path = getenv("PATH");
+        printf("%s\n", path);
+    }
+
     // Команда не найдена
     else
     {
