@@ -84,6 +84,22 @@ int main() {
         system(cmd);
     }
 
+    // Команда \cron
+    else if (strncmp(input, "\\cron", 5) == 0) 
+    {
+        // Создание директории /tmp/vfs
+        system("mkdir -p /tmp/vfs");
+
+        // Монтирование VFS в /tmp/vfs
+        system("mount -t tmpfs tmpfs /tmp/vfs");
+
+        // Инициализация планировщика cron
+        system("crontab -e");
+
+        // Печать сообщения об успехе
+        printf("VFS смонтирован в /tmp/vfs и планировщик cron инициализирован.\n");
+    }
+
     // Выполнить указанный бинарник
     else
     {
