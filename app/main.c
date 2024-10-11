@@ -74,6 +74,16 @@ int main() {
             printf("Variable not found: %s\n", var_name);
     }
 
+    // Команда \l
+    else if (strncmp(input, "\\l", 2) == 0) 
+    {   
+        char* device = input + 3;
+        device[strcspn(device, "\n")] = 0;
+        char cmd[1024];
+        sprintf(cmd, "lsblk %s", device);
+        system(cmd);
+    }
+
     // Выполнить указанный бинарник
     else
     {
