@@ -5,6 +5,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #define HISTORY_SIZE 10
 #define HISTORY_FILE "history.txt"
@@ -70,6 +73,68 @@ void execute_command(char *command) {
     }
 }
 
+void dump_memory(char *proc_id) {
+    char path[256];
+    snprintf(path, sizeof(path), "/proc/%s/maps", proc_id);
+
+    FILE *src_file = fopen(path, "r");
+    if (src_file == NULL) {
+        perror("Failed to open maps file");
+        return;
+    }
+
+    char dest_file[256];
+    snprintf(dest_file, sizeof(dest_file), "./memory_dump_%s.txt", proc_id); // Копируем в файл
+    FILE *dest = fopen(dest_file, "w");
+    if (dest == NULL) {
+        perror("Failed to open destination file");
+        fclose(src_file);
+        return;
+    }
+
+    char buffer[4096];
+    while (fgets(buffer, sizeof(buffer), src_file) != NULL) {
+        fputs(buffer, dest);
+    }
+
+    fclose(src_file);
+    fclose(dest);
+    printf("Memory map dumped to %s\n", dest_file);
+}
+
+void check_boot_disk(char *device) {
+    char path[256];
+
+    // Проверяем, начинается ли строка с "/dev/"
+    if (strncmp(device, "/dev/", 5) == 0) {
+        strncpy(path, device, sizeof(path));
+    } else {
+        snprintf(path, sizeof(path), "/dev/%s", device);
+    }
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        perror("Failed to open disk device");
+        return;
+    }
+
+    unsigned char buffer[512]; // Считываем первый сектор
+    if (read(fd, buffer, sizeof(buffer)) != sizeof(buffer)) {
+        perror("Failed to read disk sector");
+        close(fd);
+        return;
+    }
+
+    close(fd);
+
+    // Проверяем сигнатуру 0x55AA
+    if (buffer[510] == 0x55 && buffer[511] == 0xAA) {
+        printf("%s is a bootable disk.\n", path);
+    } else {
+        printf("%s is not a bootable disk.\n", path);
+    }
+}
+
 int main() {
     signal(SIGHUP, sighup_handler);
 
@@ -110,14 +175,12 @@ int main() {
                 printf("%s\n", var_value);
             else
                 printf("Variable not found: %s\n", var_name);
-        } 
-        
-        else if (strncmp(input, "\\l", 2) == 0) {
-            char* device = input + 3;
-            device[strcspn(device, "\n")] = 0;
-            char cmd[1024];
-            snprintf(cmd, sizeof(cmd), "lsblk %s", device);
-            execute_command(cmd);
+        }
+
+        else if (strncmp(input, "\\mem ", 5) == 0) {
+            char* proc_id = input + 5;
+            proc_id[strcspn(proc_id, "\n")] = 0;
+            dump_memory(proc_id);
         } 
         
         else if (strncmp(input, "run ", 4) == 0) {
@@ -126,6 +189,12 @@ int main() {
             command_to_run[strcspn(command_to_run, "\n")] = 0;
             execute_command(command_to_run);
         } 
+
+        else if (strncmp(input, "\\l ", 3) == 0) {
+            char* device = input + 3;
+            device[strcspn(device, "\n")] = 0;
+            check_boot_disk(device); // Проверяем, является ли диск загрузочным
+        }
         
         else {
             printf("The command isn't found!\n");
