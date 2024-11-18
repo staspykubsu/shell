@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <stdint.h>
 
 #define HISTORY_SIZE 10
 #define HISTORY_FILE "history.txt"
@@ -74,36 +75,39 @@ void execute_command(char *command) {
     }
 }
 
-void check_boot_disk(char *device) {
-    char path[256];
+void is_bootable_device(char* device_name) {
+    while(*device_name == ' ') device_name++;
 
-    // Проверяем, начинается ли строка с "/dev/"
-    if (strncmp(device, "/dev/", 5) == 0) {
-        strncpy(path, device, sizeof(path));
-    } else {
-        snprintf(path, sizeof(path), "/dev/%s", device);
-    }
+    const char* root = "/dev/";
+    char full_path[128];
+    sprintf(full_path, "%s%s", root, device_name);
 
-    int fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        perror("Failed to open disk device");
+    FILE* device_file = fopen(full_path, "rb");
+
+    if(device_file == NULL) {
+        printf("There is no such disk!\n");
         return;
     }
 
-    unsigned char buffer[512]; // Считываем первый сектор
-    if (read(fd, buffer, sizeof(buffer)) != sizeof(buffer)) {
-        perror("Failed to read disk sector");
-        close(fd);
+    int position = 510;
+    if(fseek(device_file, position, SEEK_SET) != 0) {
+        printf("Error while SEEK operation!\n");
+        fclose(device_file);
         return;
     }
 
-    close(fd);
+    uint8_t data[2];
+    if(fread(data, 1, 2, device_file) != 2) {
+        printf("Error while fread operation\n");
+        fclose(device_file);
+        return;
+    }
+    fclose(device_file);
 
-    // Проверяем сигнатуру 0x55AA
-    if (buffer[510] == 0x55 && buffer[511] == 0xAA) {
-        printf("%s is a bootable disk.\n", path);
+    if(data[1] == 0xaa && data[0] == 0x55) {
+        printf("Disk %s is bootable\n", device_name);
     } else {
-        printf("%s is not a bootable disk.\n", path);
+        printf("Disk %s isn't bootable\n", device_name);
     }
 }
 
@@ -163,6 +167,47 @@ void dump_memory(char *proc_id) {
     printf("Memory dump for process %s saved to %s\n", proc_id, output_file);
 }
 
+void create_vfs() {
+    // Создаем директорию для VFS
+    const char *vfs_path = "/tmp/vfs";
+    struct stat st = {0};
+
+    if (stat(vfs_path, &st) == -1) {
+        mkdir(vfs_path, 0700);
+    }
+
+    // Получаем список задач из crontab
+    FILE *fp = popen("crontab -l", "r");
+    if (fp == NULL) {
+        perror("Failed to run crontab command");
+        return;
+    }
+
+    // Создаем файл для вывода задач
+    char output_file[256];
+    snprintf(output_file, sizeof(output_file), "%s/tasks.txt", vfs_path);
+    FILE *output = fopen(output_file, "w");
+    if (output == NULL) {
+        perror("Failed to open output file for tasks");
+        pclose(fp);
+        return;
+    }
+
+    // Читаем вывод crontab и записываем в файл, игнорируя комментарии
+    char buffer[256];
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        // Игнорируем строки, начинающиеся с #
+        if (buffer[0] == '#') {
+            continue;
+        }
+        fputs(buffer, output);
+    }
+
+    fclose(output);
+    pclose(fp);
+    printf("Virtual file system created at %s with scheduled tasks.\n", vfs_path);
+}
+
 
 int main() {
     signal(SIGHUP, sighup_handler);
@@ -214,13 +259,17 @@ int main() {
         else if (strncmp(input, "\\l ", 3) == 0) {
             char* device = input + 3;
             device[strcspn(device, "\n")] = 0;
-            check_boot_disk(device); // Проверяем, является ли диск загрузочным
+            is_bootable_device(device); // Проверяем, является ли диск загрузочным
         }
         
         else if (strncmp(input, "\\mem ", 5) == 0) {
             char* proc_id = input + 5;
             proc_id[strcspn(proc_id, "\n")] = 0;
             dump_memory(proc_id); // Дамп памяти процесса
+        }
+
+        else if (strcmp(input, "\\cron\n") == 0) {
+            create_vfs(); // Создаем VFS и выводим задачи планировщика
         }
         
         else {
