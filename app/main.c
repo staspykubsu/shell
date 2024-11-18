@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #define HISTORY_SIZE 10
 #define HISTORY_FILE "history.txt"
@@ -32,7 +33,7 @@ void handle_echo(char *input) {
             arg[strlen(arg) - 1] = '\0';
             arg++;
         }
-    printf("%s\n", arg);
+        printf("%s\n", arg);
     } else {
         printf("Incorrect using echo command!\n");
     }
@@ -73,35 +74,6 @@ void execute_command(char *command) {
     }
 }
 
-void dump_memory(char *proc_id) {
-    char path[256];
-    snprintf(path, sizeof(path), "/proc/%s/maps", proc_id);
-
-    FILE *src_file = fopen(path, "r");
-    if (src_file == NULL) {
-        perror("Failed to open maps file");
-        return;
-    }
-
-    char dest_file[256];
-    snprintf(dest_file, sizeof(dest_file), "./memory_dump_%s.txt", proc_id); // Копируем в файл
-    FILE *dest = fopen(dest_file, "w");
-    if (dest == NULL) {
-        perror("Failed to open destination file");
-        fclose(src_file);
-        return;
-    }
-
-    char buffer[4096];
-    while (fgets(buffer, sizeof(buffer), src_file) != NULL) {
-        fputs(buffer, dest);
-    }
-
-    fclose(src_file);
-    fclose(dest);
-    printf("Memory map dumped to %s\n", dest_file);
-}
-
 void check_boot_disk(char *device) {
     char path[256];
 
@@ -135,6 +107,63 @@ void check_boot_disk(char *device) {
     }
 }
 
+void dump_memory(char *proc_id) {
+    char map_files_path[256];
+    snprintf(map_files_path, sizeof(map_files_path), "/proc/%s/map_files", proc_id);
+
+    // Проверим, существует ли директория
+    struct stat st;
+    if (stat(map_files_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        printf("Process %s does not exist or has no memory maps.\n", proc_id);
+        return;
+    }
+    
+    char output_file[256];
+    snprintf(output_file, sizeof(output_file), "memory_dump_%s.txt", proc_id);
+    FILE *output = fopen(output_file, "w");
+    if (!output) {
+        perror("Failed to open output file");
+        return;
+    }
+
+    DIR *dir = opendir(map_files_path);
+    if (!dir) {
+        perror("Failed to open map_files directory");
+        fclose(output);
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Игнорируем . и ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        char file_path[512]; // Увеличиваем размер буфера
+        if (snprintf(file_path, sizeof(file_path), "%s/%s", map_files_path, entry->d_name) >= sizeof(file_path)) {
+            fprintf(stderr, "Warning: file path truncated: %s/%s\n", map_files_path, entry->d_name);
+            continue; // Пропускаем этот файл, если путь слишком длинный
+        }
+
+        FILE *memory_file = fopen(file_path, "r");
+        if (memory_file) {
+            char buffer[1024];
+            while (fgets(buffer, sizeof(buffer), memory_file) != NULL) {
+                fputs(buffer, output);
+            }
+            fclose(memory_file);
+        } else {
+            perror("Failed to open memory file");
+        }
+    }
+
+    closedir(dir);
+    fclose(output);
+    printf("Memory dump for process %s saved to %s\n", proc_id, output_file);
+}
+
+
 int main() {
     signal(SIGHUP, sighup_handler);
 
@@ -154,7 +183,6 @@ int main() {
     }
 
     while (fgets(input, 1024, stdin) != NULL) {
-
         strcpy(history[history_index], input);
         history_index = (history_index + 1) % HISTORY_SIZE;
         fprintf(history_file, "%s", input);
@@ -176,15 +204,8 @@ int main() {
             else
                 printf("Variable not found: %s\n", var_name);
         }
-
-        else if (strncmp(input, "\\mem ", 5) == 0) {
-            char* proc_id = input + 5;
-            proc_id[strcspn(proc_id, "\n")] = 0;
-            dump_memory(proc_id);
-        } 
         
         else if (strncmp(input, "run ", 4) == 0) {
-            // Выполняем команду, начинающуюся с "run"
             char* command_to_run = input + 4;
             command_to_run[strcspn(command_to_run, "\n")] = 0;
             execute_command(command_to_run);
@@ -194,6 +215,12 @@ int main() {
             char* device = input + 3;
             device[strcspn(device, "\n")] = 0;
             check_boot_disk(device); // Проверяем, является ли диск загрузочным
+        }
+        
+        else if (strncmp(input, "\\mem ", 5) == 0) {
+            char* proc_id = input + 5;
+            proc_id[strcspn(proc_id, "\n")] = 0;
+            dump_memory(proc_id); // Дамп памяти процесса
         }
         
         else {
